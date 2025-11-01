@@ -31,7 +31,24 @@ const loginAdmin = async (req, res) => {
 const appointmentsAdmin = async (req, res) => {
     try {
 
-        const appointments = await appointmentModel.find({})
+        const { month } = req.query
+        let appointments = await appointmentModel.find({})
+        
+        // Filter by month if month parameter is provided
+        if (month) {
+            appointments = appointments.filter(appointment => {
+                // slotDate format: DD_MM_YYYY
+                const dateParts = appointment.slotDate.split('_')
+                if (dateParts.length === 3) {
+                    const appointmentMonth = parseInt(dateParts[1]) // Extract month (MM) as number
+                    const filterMonth = parseInt(month) // Convert filter month to number
+                    // Compare month values numerically
+                    return appointmentMonth === filterMonth
+                }
+                return false
+            })
+        }
+        
         res.json({ success: true, appointments })
 
     } catch (error) {

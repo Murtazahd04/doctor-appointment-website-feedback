@@ -45,11 +45,14 @@ const AdminContextProvider = (props)=>{
 
 
     // Getting all appointment data from Database using API
-    const getAllAppointments = async () => {
+    const getAllAppointments = async (month = null) => {
 
         try {
-
-            const { data } = await axios.get(backendUrl + '/api/admin/appointments', { headers: { aToken } })
+            let url = backendUrl + '/api/admin/appointments'
+            if (month) {
+                url += `?month=${month}`
+            }
+            const { data } = await axios.get(url, { headers: { aToken } })
            if (data.success && Array.isArray(data.appointments)) {
             setAppointments([...data.appointments].reverse());
             } else {
