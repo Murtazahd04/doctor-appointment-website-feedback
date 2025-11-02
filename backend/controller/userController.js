@@ -448,6 +448,89 @@ const getReportPDF = async (req, res) => {
     }
 }
 
+// API to get PDF by URL (more reliable than index-based)
+const getReportPDFByUrl = async (req, res) => {
+    try {
+        const userId = req.userId
+        const { pdfUrl } = req.query
+        
+        if (!pdfUrl) {
+            return res.status(400).json({ success: false, message: "PDF URL is required" })
+        }
+        
+        const user = await userModel.findById(userId).select('reports')
+        
+        if (!user || !user.reports) {
+            return res.status(404).json({ success: false, message: "User reports not found" })
+        }
+
+        // Verify that the PDF URL belongs to this user
+        const report = user.reports.find(r => r.pdfUrl === pdfUrl)
+        if (!report) {
+            return res.status(404).json({ success: false, message: "Report not found" })
+        }
+        
+        // Fetch PDF from Cloudinary using https module
+        const httpsGet = (url) => {
+            return new Promise((resolve, reject) => {
+                https.get(url, (response) => {
+                    if (response.statusCode !== 200) {
+                        reject(new Error(`Failed to fetch PDF: ${response.statusCode}`))
+                        return
+                    }
+                    const chunks = []
+                    response.on('data', (chunk) => chunks.push(chunk))
+                    response.on('end', () => resolve(Buffer.concat(chunks)))
+                    response.on('error', reject)
+                }).on('error', reject)
+            })
+        }
+        
+        const pdfBuffer = await httpsGet(pdfUrl)
+        
+        // Set proper headers for PDF viewing
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader('Content-Disposition', `inline; filename="${report.reportName.replace(/\s+/g, '_')}.pdf"`)
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Cache-Control', 'public, max-age=3600')
+        
+        // Send the PDF
+        res.send(pdfBuffer)
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ success: false, message: error.message })
+    }
+}
+
+// API to delete user report
+const deleteReport = async (req, res) => {
+    try {
+        const userId = req.userId
+        const reportIndex = parseInt(req.params.reportIndex)
+        
+        const user = await userModel.findById(userId)
+        
+        if (!user) {
+            return res.json({ success: false, message: "User not found" })
+        }
+
+        if (!user.reports || !user.reports[reportIndex]) {
+            return res.json({ success: false, message: "Report not found" })
+        }
+
+        // Remove report from array using splice
+        user.reports.splice(reportIndex, 1)
+        await user.save()
+
+        res.json({ success: true, message: 'Report deleted successfully' })
+
+    } catch (error) {
+        console.log(error)
+        res.json({ success: false, message: error.message })
+    }
+}
+
 export {
     loginUser,
     registerUser,
@@ -462,5 +545,7 @@ export {
     verifyStripe,
     uploadReport,
     getReports,
-    getReportPDF
+    getReportPDF,
+    getReportPDFByUrl,
+    deleteReport
 }

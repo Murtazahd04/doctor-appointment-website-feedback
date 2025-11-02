@@ -1,5 +1,5 @@
 import express from 'express';
-import { loginUser, registerUser, getProfile, updateProfile, bookAppointment, listAppointment, cancelAppointment, paymentRazorpay, verifyRazorpay, paymentStripe, verifyStripe, uploadReport, getReports, getReportPDF } from '../controller/userController.js';
+import { loginUser, registerUser, getProfile, updateProfile, bookAppointment, listAppointment, cancelAppointment, paymentRazorpay, verifyRazorpay, paymentStripe, verifyStripe, uploadReport, getReports, getReportPDF, getReportPDFByUrl, deleteReport } from '../controller/userController.js';
 import upload from '../middleware/multer.js';
 import authUser from '../middleware/authUser.js';
 const userRouter = express.Router();
@@ -19,5 +19,7 @@ userRouter.post("/verifyStripe", authUser, verifyStripe)
 userRouter.post("/upload-report", upload.single('pdf'), authUser, uploadReport)
 userRouter.get("/reports", authUser, getReports)
 userRouter.get("/report-pdf/:reportIndex", authUser, getReportPDF)
+userRouter.get("/report-pdf-by-url", authUser, getReportPDFByUrl)
+userRouter.delete("/delete-report/:reportIndex", authUser, deleteReport)
 
 export default userRouter;

@@ -3,6 +3,7 @@ import { AppContext } from '../context/AppContext'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import { assets } from '../assets/assets'
+import { FaTrash } from 'react-icons/fa'
 
 const MyReports = () => {
     const { backendUrl, token } = useContext(AppContext)
@@ -13,6 +14,7 @@ const MyReports = () => {
     const [reportDescription, setReportDescription] = useState('')
     const [selectedFile, setSelectedFile] = useState(null)
     const [uploading, setUploading] = useState(false)
+    const [deletingIndex, setDeletingIndex] = useState(null)
 
     // Format date for display
     const formatDate = (timestamp) => {
@@ -29,7 +31,7 @@ const MyReports = () => {
         try {
             const { data } = await axios.get(backendUrl + '/api/user/reports', { headers: { token } })
             if (data.success) {
-                setReports(data.reports.reverse()) // Reverse to show newest first
+                setReports([...data.reports].reverse()) // Reverse to show newest first (create new array to avoid mutation)
             } else {
                 setReports([])
             }
@@ -102,6 +104,37 @@ const MyReports = () => {
             toast.error(error.response?.data?.message || error.message)
         } finally {
             setUploading(false)
+        }
+    }
+
+    // Delete report
+    const deleteReport = async (displayIndex) => {
+        // Calculate original index (reports array is reversed for display)
+        const originalIndex = reports.length - 1 - displayIndex
+        
+        if (!window.confirm('Are you sure you want to delete this report?')) {
+            return
+        }
+
+        setDeletingIndex(displayIndex)
+        try {
+            const { data } = await axios.delete(
+                `${backendUrl}/api/user/delete-report/${originalIndex}`,
+                { headers: { token } }
+            )
+
+            if (data.success) {
+                toast.success(data.message || 'Report deleted successfully')
+                // Refresh reports list
+                await getReports()
+            } else {
+                toast.error(data.message || 'Failed to delete report')
+            }
+        } catch (error) {
+            console.log(error)
+            toast.error(error.response?.data?.message || error.message)
+        } finally {
+            setDeletingIndex(null)
         }
     }
 
@@ -204,6 +237,14 @@ const MyReports = () => {
                                     <h4 className='text-base font-semibold text-gray-800 flex-1'>
                                         {report.reportName}
                                     </h4>
+                                    <button
+                                        onClick={() => deleteReport(index)}
+                                        disabled={deletingIndex === index}
+                                        className='text-red-500 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors p-1'
+                                        title='Delete report'
+                                    >
+                                        <FaTrash className='w-4 h-4' />
+                                    </button>
                                 </div>
                                 <p className='text-sm text-gray-600 mb-3 line-clamp-3'>
                                     {report.description}
@@ -216,11 +257,12 @@ const MyReports = () => {
                                         <button
                                             onClick={async () => {
                                                 try {
-                                                    // Fetch PDF with authentication headers
+                                                    // Use backend endpoint with pdfUrl to avoid index calculation issues
                                                     const response = await axios.get(
-                                                        `${backendUrl}/api/user/report-pdf/${index}`,
+                                                        `${backendUrl}/api/user/report-pdf-by-url`,
                                                         {
                                                             headers: { token },
+                                                            params: { pdfUrl: report.pdfUrl },
                                                             responseType: 'blob'
                                                         }
                                                     )
