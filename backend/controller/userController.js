@@ -5,6 +5,7 @@ import userModel from "../models/userModel.js";
 import doctorModel from "../models/doctorModel.js";
 import appointmentModel from "../models/appointmentModel.js";
 import { v2 as cloudinary } from 'cloudinary'
+import https from 'https'
 // import stripe from "stripe";
 import razorpay from 'razorpay';
 
@@ -329,6 +330,124 @@ const verifyStripe = async (req, res) => {
 
 }
 
+// API to upload report
+const uploadReport = async (req, res) => {
+    try {
+        const userId = req.userId
+        const { reportName, description } = req.body
+        const pdfFile = req.file
+
+        // Validate inputs
+        if (!reportName || !description || !pdfFile) {
+            return res.json({ success: false, message: "Missing Details" })
+        }
+
+        // Validate PDF file type
+        if (pdfFile.mimetype !== 'application/pdf') {
+            return res.json({ success: false, message: "Only PDF files are allowed" })
+        }
+
+        // Upload PDF to Cloudinary
+        // For raw files, Cloudinary stores them but serves them differently
+        const pdfUpload = await cloudinary.uploader.upload(pdfFile.path, { 
+            resource_type: "raw",
+            folder: "reports"
+        })
+        
+        // Use secure_url directly - Cloudinary serves raw files correctly
+        // The URL format: https://res.cloudinary.com/{cloud_name}/raw/upload/v{version}/{folder}/{public_id}
+        const pdfUrl = pdfUpload.secure_url
+
+        // Create report object
+        const report = {
+            reportName,
+            description,
+            pdfUrl,
+            uploadedAt: Date.now()
+        }
+
+        // Add report to user's reports array
+        const user = await userModel.findById(userId)
+        if (!user) {
+            return res.json({ success: false, message: "User not found" })
+        }
+
+        user.reports.push(report)
+        await user.save()
+
+        res.json({ success: true, message: 'Report uploaded successfully' })
+
+    } catch (error) {
+        console.log(error)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+// API to get user reports
+const getReports = async (req, res) => {
+    try {
+        const userId = req.userId
+        const user = await userModel.findById(userId).select('reports')
+        
+        if (!user) {
+            return res.json({ success: false, message: "User not found" })
+        }
+
+        res.json({ success: true, reports: user.reports || [] })
+
+    } catch (error) {
+        console.log(error)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+// API to proxy/stream PDF from Cloudinary
+const getReportPDF = async (req, res) => {
+    try {
+        const userId = req.userId
+        const reportIndex = parseInt(req.params.reportIndex)
+        
+        const user = await userModel.findById(userId).select('reports')
+        
+        if (!user || !user.reports || !user.reports[reportIndex]) {
+            return res.status(404).json({ success: false, message: "Report not found" })
+        }
+
+        const report = user.reports[reportIndex]
+        
+        // Fetch PDF from Cloudinary using https module
+        const httpsGet = (url) => {
+            return new Promise((resolve, reject) => {
+                https.get(url, (response) => {
+                    if (response.statusCode !== 200) {
+                        reject(new Error(`Failed to fetch PDF: ${response.statusCode}`))
+                        return
+                    }
+                    const chunks = []
+                    response.on('data', (chunk) => chunks.push(chunk))
+                    response.on('end', () => resolve(Buffer.concat(chunks)))
+                    response.on('error', reject)
+                }).on('error', reject)
+            })
+        }
+        
+        const pdfBuffer = await httpsGet(report.pdfUrl)
+        
+        // Set proper headers for PDF viewing
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader('Content-Disposition', `inline; filename="${report.reportName.replace(/\s+/g, '_')}.pdf"`)
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Cache-Control', 'public, max-age=3600')
+        
+        // Send the PDF
+        res.send(pdfBuffer)
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ success: false, message: error.message })
+    }
+}
+
 export {
     loginUser,
     registerUser,
@@ -340,5 +459,8 @@ export {
     paymentRazorpay,
     verifyRazorpay,
     paymentStripe,
-    verifyStripe
+    verifyStripe,
+    uploadReport,
+    getReports,
+    getReportPDF
 }

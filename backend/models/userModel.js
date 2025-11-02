@@ -14,6 +14,12 @@ const userSchema = new mongoose.Schema({
   gender: { type: String, default: "Not selected" },
   dob: { type: String, default: "Not selected" },
   phone: { type: String, default: "0000000000" },
+  reports: [{
+    reportName: { type: String, required: true },
+    description: { type: String, required: true },
+    pdfUrl: { type: String, required: true },
+    uploadedAt: { type: Number, default: Date.now }
+  }],
 });
 
 const userModel = mongoose.models.user || mongoose.model("user", userSchema);
